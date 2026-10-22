@@ -1,0 +1,14 @@
+streamlit==1.63.0
+ultralytics==8.4.175
+opencv-python==5.0.0.93
+easyocr==1.7.2
+torch==2.14.0
+torchvision==0.29.1
+Pillow==12.3.0
+numpy==2.4.6
+python-dotenv==1.2.3
+pytest==9.1.1
+nbformat==5.11.1
+matplotlib==3.11.1
+pandas==3.0.5
+transformers==5.20.1

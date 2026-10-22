@@ -1,0 +1,59 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.env
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Node dependencies
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python cache & test artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local databases & user data
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+data/*.db
+data/parking_system.db
+data/feedback_images/
+data/external/
+data/training/
+*.sqlite3
+training_runs/
+
+# Large Model weights & archives (downloaded via script / instructions in README)
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.bin
+*.zip
+*.tar.gz
+models/*.pt
+models/offsed_surface_segformer/
+models/bdd100k_sidewalk_segformer/
+models/metapklot_parking_spaces.pt
+
+# System & IDE files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

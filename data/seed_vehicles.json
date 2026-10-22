@@ -1,0 +1,26 @@
+[
+  {
+    "plate_number": "SAMPLE-PLATE-1",
+    "email": "student1@example.invalid",
+    "consent_status": 1,
+    "owner_name": "Sample Vehicle 1",
+    "vehicle_type": "car",
+    "notes": "Testing Sample 1 - Editable placeholder plate"
+  },
+  {
+    "plate_number": "SAMPLE-PLATE-2",
+    "email": "principal1@example.invalid",
+    "consent_status": 1,
+    "owner_name": "Sample Vehicle 2",
+    "vehicle_type": "car",
+    "notes": "Testing Sample 2 - Editable placeholder plate"
+  },
+  {
+    "plate_number": "SAMPLE-PLATE-3",
+    "email": "visitor1@example.invalid",
+    "consent_status": 1,
+    "owner_name": "Sample Vehicle 3",
+    "vehicle_type": "car",
+    "notes": "Testing Sample 3 - Editable placeholder plate"
+  }
+]
