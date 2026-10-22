@@ -215,6 +215,33 @@ def test_resend_https_delivery_uses_configured_verified_sender(temp_db, monkeypa
     assert captured[0].full_url == "https://api.resend.com/emails"
     assert json.loads(captured[0].data)["from"] == "parking@example.org"
 
+
+def test_smtp_display_name_does_not_replace_sender_or_login_email(temp_db, monkeypatch):
+    import notifications
+
+    values = {
+        "SMTP_USERNAME": "SRKR SECURITY",
+        "SMTP_SENDER_EMAIL": "vivekpastor30@gmail.com",
+        "SMTP_PASSWORD": "test-app-password",
+    }
+    monkeypatch.setattr(notifications, "_deployment_secret", lambda name, default="": values.get(name, default))
+    smtp_client = MagicMock()
+    smtp_client.__enter__.return_value = smtp_client
+    monkeypatch.setattr(notifications.smtplib, "SMTP", lambda *args, **kwargs: smtp_client)
+
+    result = send_violation_notice(
+        event_id="smtp_sender_mapping_test",
+        plate_number="SAMPLEPLATE1",
+        recipient_email="student1@example.invalid",
+        zone_name="Zone A",
+        db_path=temp_db,
+    )
+
+    assert result["success"] is True
+    smtp_client.login.assert_called_once_with("vivekpastor30@gmail.com", "test-app-password")
+    sent_message = smtp_client.send_message.call_args.args[0]
+    assert sent_message["From"] == "vivekpastor30@gmail.com"
+
 # 9. Repeated clicks do not send duplicate notices for the same event (Idempotency)
 def test_repeated_clicks_do_not_send_duplicate_notices(temp_db):
     mock_smtp = MagicMock()

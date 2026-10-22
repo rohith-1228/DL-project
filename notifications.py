@@ -201,17 +201,25 @@ def send_violation_notice(
     # 2. Check SMTP configuration
     smtp_server = getattr(config, "SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(getattr(config, "SMTP_PORT", 587))
+    smtp_username = _deployment_secret("SMTP_USERNAME", getattr(config, "SMTP_USERNAME", ""))
+    configured_smtp_email = _deployment_secret("SMTP_EMAIL", getattr(config, "SMTP_EMAIL", ""))
+    configured_sender_email = _deployment_secret("SMTP_SENDER_EMAIL", getattr(config, "SMTP_SENDER_EMAIL", ""))
+    # SMTP_USERNAME is the authentication identity, not a display name or
+    # necessarily the From address. Prefer an explicit sender email, and if a
+    # display name was mistakenly entered as SMTP_USERNAME, authenticate as the
+    # valid sender account instead.
     sender_email = (
-        _deployment_secret("SMTP_EMAIL", getattr(config, "SMTP_EMAIL", ""))
-        or _deployment_secret("SMTP_USERNAME", getattr(config, "SMTP_USERNAME", ""))
-        or _deployment_secret("SMTP_SENDER_EMAIL", getattr(config, "SMTP_SENDER_EMAIL", ""))
+        configured_smtp_email
+        or configured_sender_email
+        or (smtp_username if is_valid_email(smtp_username) else "")
     )
+    smtp_login = smtp_username if is_valid_email(smtp_username) else sender_email
     smtp_pass = (
         _deployment_secret("SMTP_APP_PASSWORD", getattr(config, "SMTP_APP_PASSWORD", ""))
         or _deployment_secret("SMTP_PASSWORD", getattr(config, "SMTP_PASSWORD", ""))
     )
 
-    if not server_override and not resend_api_key and (not sender_email or not smtp_pass):
+    if not server_override and not resend_api_key and (not sender_email or not smtp_login or not smtp_pass):
         error_msg = (
             "Email is not configured. For Streamlit Cloud, add RESEND_API_KEY and "
             "RESEND_FROM_EMAIL in App settings → Secrets (the sender must be verified "
@@ -284,7 +292,7 @@ Smart Parking Violation Detection System
             with smtp_client as server:
                 if smtp_port != 465 and config.SMTP_USE_TLS:
                     server.starttls()
-                server.login(sender_email, smtp_pass)
+                server.login(smtp_login, smtp_pass)
                 server.send_message(msg)
 
         # Log success
