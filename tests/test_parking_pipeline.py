@@ -214,10 +214,12 @@ def test_verified_consenting_registry_match(temp_db):
 
 # Scenario 10: Missing SMTP credentials handling
 def test_missing_smtp_credentials_handling(temp_db, monkeypatch):
+    import notifications
     import config
     monkeypatch.setattr(config, "SMTP_USERNAME", "")
     monkeypatch.setattr(config, "SMTP_PASSWORD", "")
     monkeypatch.setattr(config, "SMTP_SENDER_EMAIL", "")
+    monkeypatch.setattr(notifications, "_deployment_secret", lambda name, default="": "")
 
     result = send_violation_notice(
         event_id="test_event_missing_smtp",

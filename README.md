@@ -233,7 +233,7 @@ The export writes `data/training/prediction_feedback/manifest.jsonl` and its ref
 
 The current local run used all 203 labeled frames (162 train / 41 validation), with a deterministic split. Validation IoU was 0.997 for grass, 0.958 for the non-drivable-pavement proxy, and 0.000 for drivable pavement (mean IoU 0.652). Drivable pavement was very rare in the held-out labels, so this checkpoint is intended only as an experimental grass-region signal; it is not a general road/sidewalk segmenter. The existing vehicle detector returned two candidate cars on the held-out split; both had predicted grass overlap and are marked `Review required`. These are qualitative predictions, not verified violation cases. The UI should be checked against local campus camera images before operational use.
 
-### Step 5: Configure App Access and Optional SMTP Notices
+### Step 5: Configure App Access and Optional Email Notices
 Copy `.env.example` to `.env`:
 ```powershell
 Copy-Item .env.example .env
@@ -248,7 +248,9 @@ SMTP_PORT=587
 SMTP_USE_TLS=true
 CONFIGURED_LOCATION=Main Campus Parking Area
 ```
-The app will not expose the registry or controls until `APP_PASSWORD` is configured with at least 8 characters. Keep `.env` private. The shared password, local SQLite database, and single-process Streamlit setup are for a trusted demo only; they are not suitable for public or multi-user production deployment. The app expires idle sessions after `AUTH_IDLE_TIMEOUT_MINUTES` (default 30) and provides a sign-out button, but production hosting still needs HTTPS, individual accounts/roles, secret management, backups, and operational monitoring. If SMTP credentials are unset, email dispatch stays unavailable; analysis and review remain usable. Uploads are limited to 15 MB and 40 million pixels by default. Keep `MAX_IMAGE_UPLOAD_MB` aligned with `.streamlit/config.toml`.
+For Streamlit Community Cloud, use an HTTPS email API because hosted environments may close outbound SMTP connections. Configure `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in the app's **Settings → Secrets**; the sender address/domain must be verified with Resend. Local deployments can use the SMTP settings above. Port 465 uses implicit TLS; port 587 uses STARTTLS. A `SMTPServerDisconnected` message indicates the SMTP connection was closed, commonly by network policy; switching to an HTTPS provider avoids SMTP ports.
+
+The app will not expose the registry or controls until `APP_PASSWORD` is configured with at least 8 characters. Keep `.env` private. The shared password, local SQLite database, and single-process Streamlit setup are for a trusted demo only; they are not suitable for public or multi-user production deployment. The app expires idle sessions after `AUTH_IDLE_TIMEOUT_MINUTES` (default 30) and provides a sign-out button, but production hosting still needs HTTPS, individual accounts/roles, secret management, backups, and operational monitoring. If email credentials are unset, dispatch stays unavailable; analysis and review remain usable. Uploads are limited to 15 MB and 40 million pixels by default. Keep `MAX_IMAGE_UPLOAD_MB` aligned with `.streamlit/config.toml`.
 
 Optional model and database paths can be overridden with `VEHICLE_MODEL_PATH`, `OVERHEAD_VEHICLE_MODEL_PATH`, `PLATE_MODEL_PATH`, `OFFSED_SURFACE_MODEL_PATH`, `BDD100K_SIDEWALK_MODEL_PATH`, and `DB_PATH`. Relative values are resolved from the project directory; absolute paths are also accepted. Keep the SQLite database on persistent local storage and back it up consistently with its WAL files.
 

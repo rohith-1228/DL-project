@@ -80,6 +80,21 @@ def _indian_plate_candidate(raw_text: str) -> Tuple[str, bool]:
             if match:
                 return match.group(1), True
 
+    # OCR can concatenate a two-line Indian plate bottom-up and append one
+    # stray glyph from the blue IND badge (e.g. "40BS2799 APL IND"). Recover
+    # only a complete, structurally valid serial/series/district followed by
+    # a known state code, allowing at most one trailing OCR artifact. Mark it
+    # repaired so downstream review remains mandatory.
+    for state in _INDIAN_STATE_CODES:
+        reverse_pattern = re.compile(
+            rf"(\d{{1,2}}[A-Z]{{1,3}}\d{{4}}){state}[A-Z0-9]?"
+        )
+        reverse_match = reverse_pattern.search(compact)
+        if reverse_match:
+            candidate = state + reverse_match.group(1)
+            if _INDIAN_PLATE_RE.fullmatch(candidate):
+                return candidate, True
+
     # Some supplied/test images use non-Indian demonstration registrations
     # (for example PQR 3456, KAB 1234). Keep those readable too, while requiring
     # a plausible mixed letter/digit structure to avoid returning scene text.

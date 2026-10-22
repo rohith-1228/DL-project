@@ -2,11 +2,50 @@ import smtplib
 from email.message import EmailMessage
 import datetime
 import hmac
+import json
+import os
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 import config
 from database import get_connection, init_db
+
+
+def _deployment_secret(name: str, default: str = "") -> str:
+    """Read an environment variable or a Streamlit Community Cloud secret."""
+    value = os.getenv(name, "").strip()
+    if value:
+        return value
+    try:
+        import streamlit as st
+        value = str(st.secrets.get(name, default)).strip()
+    except Exception:
+        value = default
+    return value
+
+
+def _send_via_resend(api_key: str, from_email: str, recipient: str, subject: str, body: str) -> None:
+    """Send email through Resend's HTTPS API (works on hosts blocking SMTP)."""
+    payload = json.dumps({
+        "from": from_email,
+        "to": [recipient],
+        "subject": subject,
+        "text": body,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        if not 200 <= response.status < 300:
+            raise RuntimeError(f"Resend returned HTTP {response.status}")
 
 def is_duplicate_event(event_id: str, db_path: Optional[Path] = None) -> bool:
     """
@@ -154,18 +193,30 @@ def send_violation_notice(
         if conn:
             conn.close()
 
+    # HTTPS email APIs are supported for hosted deployments where SMTP ports
+    # are commonly blocked. A configured Resend API key takes precedence.
+    resend_api_key = _deployment_secret("RESEND_API_KEY")
+    resend_from_email = _deployment_secret("RESEND_FROM_EMAIL")
+
     # 2. Check SMTP configuration
     smtp_server = getattr(config, "SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(getattr(config, "SMTP_PORT", 587))
     sender_email = (
-        getattr(config, "SMTP_EMAIL", "")
-        or getattr(config, "SMTP_USERNAME", "")
-        or getattr(config, "SMTP_SENDER_EMAIL", "")
+        _deployment_secret("SMTP_EMAIL", getattr(config, "SMTP_EMAIL", ""))
+        or _deployment_secret("SMTP_USERNAME", getattr(config, "SMTP_USERNAME", ""))
+        or _deployment_secret("SMTP_SENDER_EMAIL", getattr(config, "SMTP_SENDER_EMAIL", ""))
     )
-    smtp_pass = getattr(config, "SMTP_APP_PASSWORD", "") or getattr(config, "SMTP_PASSWORD", "")
+    smtp_pass = (
+        _deployment_secret("SMTP_APP_PASSWORD", getattr(config, "SMTP_APP_PASSWORD", ""))
+        or _deployment_secret("SMTP_PASSWORD", getattr(config, "SMTP_PASSWORD", ""))
+    )
 
-    if not server_override and (not sender_email or not smtp_pass):
-        error_msg = "SMTP configuration is missing. Please set SMTP_EMAIL and SMTP_APP_PASSWORD in your .env file."
+    if not server_override and not resend_api_key and (not sender_email or not smtp_pass):
+        error_msg = (
+            "Email is not configured. For Streamlit Cloud, add RESEND_API_KEY and "
+            "RESEND_FROM_EMAIL in App settings → Secrets (the sender must be verified "
+            "with Resend). For local SMTP, set SMTP_EMAIL and SMTP_APP_PASSWORD."
+        )
         log_notification_event(
             event_id=event_id,
             plate_number=plate_number,
@@ -187,7 +238,7 @@ def send_violation_notice(
 
     msg = EmailMessage()
     msg["Subject"] = "Parking Notice — Vehicle Detected in a Restricted Zone"
-    msg["From"] = sender_email if sender_email else "smart-parking@system.local"
+    msg["From"] = (resend_from_email or sender_email) if (resend_api_key or sender_email) else "smart-parking@system.local"
     msg["To"] = recipient_email
 
     body_text = f"""Hello,
@@ -215,9 +266,23 @@ Smart Parking Violation Detection System
         if server_override is not None:
             # Used for testing / mock verification
             server_override.send_message(msg)
+        elif resend_api_key:
+            if not resend_from_email:
+                raise ValueError("RESEND_FROM_EMAIL is required when using Resend and must be a verified sender.")
+            _send_via_resend(
+                resend_api_key,
+                resend_from_email,
+                recipient_email,
+                str(msg["Subject"]),
+                body_text,
+            )
         else:
-            with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
-                if config.SMTP_USE_TLS:
+            if smtp_port == 465:
+                smtp_client = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=20)
+            else:
+                smtp_client = smtplib.SMTP(smtp_server, smtp_port, timeout=20)
+            with smtp_client as server:
+                if smtp_port != 465 and config.SMTP_USE_TLS:
                     server.starttls()
                 server.login(sender_email, smtp_pass)
                 server.send_message(msg)
@@ -251,8 +316,32 @@ Smart Parking Violation Detection System
         )
         return {"success": False, "message": err, "status": "AUTH_ERROR"}
 
+    except urllib.error.HTTPError as e:
+        try:
+            detail = e.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            detail = ""
+        err = f"Email provider rejected the request (HTTP {e.code}). Check the API key and verified sender. {detail}".strip()
+        log_notification_event(
+            event_id=event_id,
+            plate_number=plate_number,
+            recipient_email=recipient_email,
+            zone_name=zone_name,
+            status="FAILED",
+            error_summary=err,
+            db_path=db_path
+        )
+        return {"success": False, "message": err, "status": "EMAIL_API_ERROR"}
+
     except Exception as e:
-        err = f"Failed to send email: {type(e).__name__} ({e})"
+        if isinstance(e, smtplib.SMTPServerDisconnected):
+            err = (
+                "SMTP server closed the connection. Streamlit Cloud may block outbound SMTP; "
+                "configure RESEND_API_KEY and RESEND_FROM_EMAIL in Streamlit Secrets, or "
+                "try SMTP port 465 with implicit SSL."
+            )
+        else:
+            err = f"Failed to send email: {type(e).__name__} ({e})"
         log_notification_event(
             event_id=event_id,
             plate_number=plate_number,

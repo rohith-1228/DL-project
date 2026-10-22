@@ -17,6 +17,7 @@ from registry import (
     is_valid_email
 )
 from plate_reader import read_plate_from_vehicle_crop
+from plate_reader import _indian_plate_candidate
 from notifications import send_violation_notice, is_duplicate_event, get_recent_audit_logs
 
 @pytest.fixture
@@ -126,12 +127,14 @@ def test_send_email_notice_sends_to_correct_registered_recipient(temp_db):
 
 # 7. Missing SMTP configuration produces a clear error
 def test_missing_smtp_configuration_produces_clear_error(temp_db, monkeypatch):
+    import notifications
     import config
     monkeypatch.setattr(config, "SMTP_EMAIL", "")
     monkeypatch.setattr(config, "SMTP_APP_PASSWORD", "")
     monkeypatch.setattr(config, "SMTP_USERNAME", "")
     monkeypatch.setattr(config, "SMTP_PASSWORD", "")
     monkeypatch.setattr(config, "SMTP_SENDER_EMAIL", "")
+    monkeypatch.setattr(notifications, "_deployment_secret", lambda name, default="": "")
 
     result = send_violation_notice(
         event_id="test_event_missing_cfg",
@@ -144,7 +147,13 @@ def test_missing_smtp_configuration_produces_clear_error(temp_db, monkeypatch):
 
     assert result["success"] is False
     assert result["status"] == "FAILED_CONFIG"
-    assert "SMTP configuration is missing" in result["message"]
+    assert "Email is not configured" in result["message"]
+
+
+def test_reverse_two_line_plate_with_badge_artifact_is_recovered_for_review():
+    plate, repaired = _indian_plate_candidate("40BS2799 APL IND")
+    assert plate == "AP40BS2799"
+    assert repaired is True
 
 # 8. SMTP failure is recorded correctly
 def test_smtp_failure_recorded_correctly(temp_db):
@@ -174,6 +183,37 @@ def test_smtp_failure_recorded_correctly(temp_db):
     assert row is not None
     assert row["status"] == "FAILED"
     assert "Connection reset" in row["error_summary"]
+
+
+def test_resend_https_delivery_uses_configured_verified_sender(temp_db, monkeypatch):
+    import json
+    import notifications
+
+    success, _ = register_vehicle(
+        "RESEND123", "resend-recipient@example.com", consent_status=1, db_path=temp_db
+    )
+    assert success
+    values = {"RESEND_API_KEY": "test-api-key", "RESEND_FROM_EMAIL": "parking@example.org"}
+    monkeypatch.setattr(notifications, "_deployment_secret", lambda name, default="": values.get(name, default))
+    response = MagicMock()
+    response.status = 200
+    response.__enter__.return_value = response
+    captured = []
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: captured.append(request) or response)
+
+    result = send_violation_notice(
+        event_id="resend_test_1",
+        plate_number="RESEND123",
+        recipient_email="resend-recipient@example.com",
+        zone_name="Zone A",
+        db_path=temp_db,
+    )
+
+    assert result["success"] is True
+    assert result["status"] == "SENT"
+    assert len(captured) == 1
+    assert captured[0].full_url == "https://api.resend.com/emails"
+    assert json.loads(captured[0].data)["from"] == "parking@example.org"
 
 # 9. Repeated clicks do not send duplicate notices for the same event (Idempotency)
 def test_repeated_clicks_do_not_send_duplicate_notices(temp_db):
