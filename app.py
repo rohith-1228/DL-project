@@ -1267,7 +1267,13 @@ if results is not None:
                 with col_thumb:
                     st.image(v["vehicle_crop"], caption=f"Vehicle #{v['vehicle_id']}", width="stretch")
                     if v.get("plate_crop") is not None:
-                        st.image(v["plate_crop"], caption="Plate Crop", width="stretch")
+                        crop_source = v.get("plate_crop_source", "plate_detector")
+                        crop_caption = (
+                            "Estimated lower vehicle area — verify manually"
+                            if crop_source == "estimated_vehicle_lower_region"
+                            else "Plate Crop (zoomed)"
+                        )
+                        st.image(v["plate_crop"], caption=crop_caption, width=340)
 
                 with col_details:
                     # Plate display

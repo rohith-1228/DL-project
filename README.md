@@ -252,6 +252,10 @@ The app will not expose the registry or controls until `APP_PASSWORD` is configu
 
 Optional model and database paths can be overridden with `VEHICLE_MODEL_PATH`, `OVERHEAD_VEHICLE_MODEL_PATH`, `PLATE_MODEL_PATH`, `OFFSED_SURFACE_MODEL_PATH`, `BDD100K_SIDEWALK_MODEL_PATH`, and `DB_PATH`. Relative values are resolved from the project directory; absolute paths are also accepted. Keep the SQLite database on persistent local storage and back it up consistently with its WAL files.
 
+### Streamlit Community Cloud model files
+
+The deployed app must receive the model files through Git; files present only on the development computer are not available to Streamlit Cloud. This repository keeps the license-plate detector (`models/license_plate_detector.pt`) and the OFFSED grass model (`models/offsed_surface_segformer/`) eligible for tracking while continuing to ignore datasets, training runs, and unrelated weights. Include those model files in the commit sent to the deployment branch. Without them, plate reading falls back to OCR-only localization and grass classification uses weaker image heuristics, which can produce more `Review required` results. The plate preview labels an estimated crop when no plate can be localized; that crop is for manual verification and is not treated as a recognized plate.
+
 ---
 
 ## 6. Running the Streamlit Application

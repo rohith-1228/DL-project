@@ -613,6 +613,8 @@ def detect_parking_stall_lines(
     return {
         "divider_x_coords": unique_x if is_reliable else [],
         "divider_lines": grouped_lines if is_reliable else [],
+        "observed_divider_lines": grouped_lines,
+        "vehicle_boxes": [tuple(map(int, box)) for box in (vehicle_boxes or [])],
         "reference_y": reference_y,
         "image_height": height,
         "is_reliable": is_reliable,
@@ -1341,6 +1343,27 @@ def evaluate_parking_alignment(
     if continuation is not None and not competing_surface_or_access_violation:
         x = int(continuation["x"])
         pixels = int(continuation.get("pixels", 0))
+        image_height = max(1, int(stall_data.get("image_height", max(vy2, 1))))
+        row_neighbors = sum(
+            1 for other in stall_data.get("vehicle_boxes", [])
+            if tuple(other) != tuple(vehicle["bbox"])
+            and abs(int(other[3]) - vy2) <= max(25, int(0.07 * image_height))
+            and abs((int(other[0]) + int(other[2])) // 2 - (vx1 + vx2) // 2)
+                >= max(80, int(0.45 * max(vx2 - vx1, int(other[2]) - int(other[0]))))
+        )
+        # A strong stripe hidden beneath the car, together with neighboring
+        # vehicles at the same depth, is useful marked-row context even when
+        # Hough cannot reconstruct three full dividers through occlusion.
+        # Keep this as a potential finding, never a confirmed enforcement action.
+        if pixels >= 24 and row_neighbors >= 1 and len(stall_data.get("vehicle_boxes", [])) >= 3:
+            return {
+                "category_key": "cat5_improper_alignment",
+                "category_name": "Improper Parking Alignment",
+                "status": "Potential violation detected",
+                "explanation": "A strong painted-line continuation crosses the vehicle base in a row of adjacent parked vehicles, suggesting it may straddle a stall boundary.",
+                "evidence": f"Bright line continues beneath vehicle at X={x} ({pixels} pixels); {row_neighbors} neighboring vehicle(s) share the parking row",
+                "is_violation": True
+            }
         if is_reliable and pixels >= 12:
             return {
                 "category_key": "cat5_improper_alignment",

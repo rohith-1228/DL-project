@@ -51,6 +51,13 @@ models/*.pt
 models/offsed_surface_segformer/
 models/bdd100k_sidewalk_segformer/
 models/metapklot_parking_spaces.pt
+# Small runtime models required by the deployed plate and grass checks.
+!models/license_plate_detector.pt
+!models/offsed_surface_segformer/
+models/offsed_surface_segformer/*
+!models/offsed_surface_segformer/config.json
+!models/offsed_surface_segformer/preprocessor_config.json
+!models/offsed_surface_segformer/model.safetensors
 
 # System & IDE files
 .vscode/
